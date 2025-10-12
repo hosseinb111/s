@@ -3,21 +3,29 @@ class SnakeGame {
     this.canvas = document.getElementById('gameCanvas');
     this.ctx = this.canvas.getContext('2d');
     
+    // Set canvas size to match Google's Snake game
+    this.canvas.width = 600;
+    this.canvas.height = 530;
+    
     // DOM elements
     this.appleCountEl = document.getElementById('appleCount');
     this.trophyScoreEl = document.getElementById('trophyScore');
-    this.finalScoreEl = document.getElementById('finalScore');
-    this.restartBtn = document.getElementById('restartBtn');
-    this.pauseBtn = document.getElementById('pauseBtn');
-    this.settingsBtn = document.getElementById('settingsBtn');
-    this.menuEl = document.getElementById('menu');
     this.gameOverEl = document.getElementById('gameOver');
+    this.menuEl = document.getElementById('menu');
     this.playBtn = document.querySelector('.play-btn');
     
     // Game constants
     this.GRID_SIZE = 20;
-    this.TILE_COUNT_X = Math.floor(this.canvas.width / this.GRID_SIZE);
-    this.TILE_COUNT_Y = Math.floor(this.canvas.height / this.GRID_SIZE);
+    this.TILE_COUNT_X = 30; // 600/20
+    this.TILE_COUNT_Y = 26; // 530/20
+    
+    // Speed settings (milliseconds per move)
+    this.SPEEDS = {
+      slow: 100,
+      normal: 80,
+      fast: 50,
+      insane: 30
+    };
     
     // Game state
     this.snake = [];
@@ -201,53 +209,62 @@ class SnakeGame {
     
     // Draw foods
     this.foods.forEach(food => {
-      this.ctx.fillStyle = food.type === 'special' ? '#ffd700' : '#ff3b30';
+      const x = food.x * this.GRID_SIZE + this.GRID_SIZE / 2;
+      const y = food.y * this.GRID_SIZE + this.GRID_SIZE / 2;
+      const radius = this.GRID_SIZE / 2 - 2;
+
+      // Draw apple
+      this.ctx.fillStyle = food.type === 'special' ? '#fdd663' : '#e44d3c';
+      this.ctx.strokeStyle = food.type === 'special' ? '#c4a052' : '#ba3e31';
+      this.ctx.lineWidth = 2;
       this.ctx.beginPath();
-      this.ctx.arc(
-        food.x * this.GRID_SIZE + this.GRID_SIZE / 2,
-        food.y * this.GRID_SIZE + this.GRID_SIZE / 2,
-        this.GRID_SIZE / 2.2, 0, Math.PI * 2
-      );
+      this.ctx.arc(x, y, radius, 0, Math.PI * 2);
       this.ctx.fill();
-    });
+      this.ctx.stroke();
+
+      // Draw apple stem
+      this.ctx.fillStyle = '#578a34';
+      this.ctx.fillRect(x - 1, y - radius - 2, 2, 4);
     
     // Draw snake
     this.snake.forEach((segment, index) => {
+      const x = segment.x * this.GRID_SIZE + this.GRID_SIZE / 2;
+      const y = segment.y * this.GRID_SIZE + this.GRID_SIZE / 2;
+      const radius = this.GRID_SIZE / 2 - 1;
+
+      // Draw segment body
+      this.ctx.fillStyle = '#4a752c';
+      this.ctx.strokeStyle = '#578a34';
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.stroke();
+
       if (index === 0) {
-        // Draw head
-        this.ctx.fillStyle = '#fff';
-        this.ctx.fillRect(
-          segment.x * this.GRID_SIZE,
-          segment.y * this.GRID_SIZE,
-          this.GRID_SIZE,
-          this.GRID_SIZE
-        );
-        
         // Draw eyes
-        this.ctx.fillStyle = '#000';
         const eyeSize = 3;
-        const eyeOffset = 4;
+        const eyeOffset = 6;
+        this.ctx.fillStyle = '#fff';
+        
+        let eyeX1, eyeY1, eyeX2, eyeY2;
         
         if (this.direction.x !== 0) {
           // Horizontal movement
-          const x = segment.x * this.GRID_SIZE + (this.direction.x > 0 ? this.GRID_SIZE - eyeOffset : eyeOffset);
-          this.ctx.fillRect(x, segment.y * this.GRID_SIZE + eyeOffset, eyeSize, eyeSize);
-          this.ctx.fillRect(x, segment.y * this.GRID_SIZE + this.GRID_SIZE - eyeOffset - eyeSize, eyeSize, eyeSize);
+          eyeX1 = eyeX2 = x + (this.direction.x > 0 ? eyeOffset : -eyeOffset);
+          eyeY1 = y - eyeOffset/2;
+          eyeY2 = y + eyeOffset/2;
         } else {
           // Vertical movement
-          const y = segment.y * this.GRID_SIZE + (this.direction.y > 0 ? this.GRID_SIZE - eyeOffset : eyeOffset);
-          this.ctx.fillRect(segment.x * this.GRID_SIZE + eyeOffset, y, eyeSize, eyeSize);
-          this.ctx.fillRect(segment.x * this.GRID_SIZE + this.GRID_SIZE - eyeOffset - eyeSize, y, eyeSize, eyeSize);
+          eyeY1 = eyeY2 = y + (this.direction.y > 0 ? eyeOffset : -eyeOffset);
+          eyeX1 = x - eyeOffset/2;
+          eyeX2 = x + eyeOffset/2;
         }
-      } else {
-        // Draw body
-        this.ctx.fillStyle = '#41b85f';
-        this.ctx.fillRect(
-          segment.x * this.GRID_SIZE + 1,
-          segment.y * this.GRID_SIZE + 1,
-          this.GRID_SIZE - 2,
-          this.GRID_SIZE - 2
-        );
+        
+        this.ctx.beginPath();
+        this.ctx.arc(eyeX1, eyeY1, eyeSize, 0, Math.PI * 2);
+        this.ctx.arc(eyeX2, eyeY2, eyeSize, 0, Math.PI * 2);
+        this.ctx.fill();
       }
     });
   }

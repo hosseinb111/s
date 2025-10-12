@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Snake Game</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <title>Google Snake</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary-color: #41b85f;
-      --bg-color: #202124;
+      --primary-color: #4a752c;
+      --game-bg: #578a34;
       --text-color: #fff;
       --border-color: #5f6368;
-      --menu-bg: rgba(32, 33, 36, 0.95);
+      --menu-bg: rgba(0, 0, 0, 0.7);
+      --trophy-color: #fdd663;
     }
 
     * {
@@ -21,30 +22,35 @@
     }
 
     body {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      background: var(--bg-color);
-      color: var(--text-color);
       font-family: 'Roboto', Arial, sans-serif;
-      padding: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background-color: var(--game-bg);
     }
 
     .game-container {
+      width: 600px;
+      height: 600px;
       position: relative;
     }
 
     canvas {
-      border: 2px solid var(--border-color);
-      margin: 20px 0;
+      width: 100%;
+      height: calc(100% - 70px);
+      background-color: var(--game-bg);
     }
 
     .score-container {
+      width: 100%;
+      height: 70px;
+      background-color: var(--primary-color);
       display: flex;
-      gap: 20px;
-      margin-bottom: 20px;
-      font-size: 20px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
     }
 
     .score-item {
@@ -91,16 +97,18 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: var(--menu-bg);
-      padding: 30px;
-      border-radius: 10px;
-      text-align: center;
+      width: 300px;
+      height: 366px;
+      background: #4dc1f9;
       display: none;
-      min-width: 300px;
-      z-index: 100;
-    }
-
-    .menu.active {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      border-radius: 8px;
+      padding: 20px;
+      color: #fff;
+    }    .menu.active {
       display: block;
     }
 
