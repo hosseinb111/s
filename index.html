@@ -35,7 +35,7 @@
   .logoBox{width:42px;height:42px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:700;color:white;background:linear-gradient(135deg,#5bb24e,#2f6b24);box-shadow:0 6px 18px rgba(0,0,0,0.25)}
   .score{font-size:20px}
   .right{display:flex;align-items:center;gap:10px}
-  .iconBtn{width:36px;height:36;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;border:none}
+  .iconBtn{width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;border:none}
   .boardWrap{width:100%; background:var(--canvas-dark); height:calc(100% - 70px); display:flex; align-items:center; justify-content:center; position:relative; border-radius:0 0 10px 10px; overflow:hidden}
   canvas#main{background:var(--canvas-light); display:block; border-radius:6px; box-shadow: 0 8px 30px rgba(0,0,0,0.35)}
   .overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none}
@@ -159,125 +159,358 @@
   </div>
 
 <script>
-// SNAKE GAME - Improved, single-file version
-// All logic, styles, and markup are in this file for easy portability and maintenance.
+(() => {
+  // --- DOM Elements
+  const canvas = document.getElementById('main');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const overlay = document.getElementById('overlay');
+  const menuCard = document.getElementById('menuCard');
+  const playBtn = document.getElementById('playBtn');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsPanel = document.getElementById('settings');
+  const speedPicker = document.getElementById('speedPicker');
+  const sizePicker = document.getElementById('sizePicker');
+  const themePicker = document.getElementById('themePicker');
+  const scoreEl = document.getElementById('score');
+  const gameOverEl = document.getElementById('gameOver');
+  const finalScoreEl = document.getElementById('finalScore');
+  const retryBtn = document.getElementById('retryBtn');
+  const menuBtn = document.getElementById('menuBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const wrapBtn = document.getElementById('wrapBtn');
+  const shuffleBtn = document.getElementById('shuffleBtn');
+  const themeToggle = document.getElementById('themeToggle');
+  const eatPopup = document.getElementById('eatPopup');
 
-(function () {
-  // --- DOM Elements ---
-  const $ = id => document.getElementById(id);
-  const canvas = $("main");
-  const ctx = canvas.getContext("2d", { alpha: false });
-  const overlay = $("overlay");
-  const menuCard = $("menuCard");
-  const playBtn = $("playBtn");
-  const settingsBtn = $("settingsBtn");
-  const settingsPanel = $("settings");
-  const speedPicker = $("speedPicker");
-  const sizePicker = $("sizePicker");
-  const themePicker = $("themePicker");
-  const scoreEl = $("score");
-  const gameOverEl = $("gameOver");
-  const finalScoreEl = $("finalScore");
-  const retryBtn = $("retryBtn");
-  const menuBtn = $("menuBtn");
-  const pauseBtn = $("pauseBtn");
-  const wrapBtn = $("wrapBtn");
-  const shuffleBtn = $("shuffleBtn");
-  const themeToggle = $("themeToggle");
-  const eatPopup = $("eatPopup");
-
-  // --- Game Config & State ---
-  let cols = 20, rows = 17, cellSize = 30;
+  // --- Configuration & State
+  let cols = 20;
+  let rows = 17;
+  let cellSize = 30;
   let dpr = Math.max(1, window.devicePixelRatio || 1);
   let speedLevel = 1;
-  const speedMap = [5, 8, 12]; // moves/sec
+  const speedMap = [5, 8, 12];
   let movesPerSecond = speedMap[speedLevel];
   let moveInterval = 1000 / movesPerSecond;
-  let wrap = true, running = false;
-  let lastTick = performance.now(), accumulated = 0;
-  let snake = [], dir = { x: 1, y: 0 }, nextDir = null, apple = null, score = 0;
-  let particles = [], trail = [], shake = { x: 0, y: 0, decay: 0.9 };
-  const PARTICLE_CAP = 260, TRAIL_MAX = 18;
+  let wrap = true;
+  let running = false;
+  let gamePaused = false;
+
+  // Game timing
+  let lastTick = performance.now();
+  let accumulated = 0;
+
+  // Game state
+  let snake = [];
+  let dir = { x: 1, y: 0 };
+  let nextDir = null;
+  let apple = null;
+  let score = 0;
+
+  // Visual effects
+  let particles = [];
+  const PARTICLE_CAP = 260;
+  let trail = [];
+  const TRAIL_MAX = 18;
+  let shake = { x: 0, y: 0, decay: 0.9 };
+
+  // Audio context
   let audioCtx = null;
 
-  // --- Utility Functions ---
+  // --- Canvas Setup
   function setupCanvas() {
-    const cssWidth = 600, cssHeight = 530;
-    canvas.style.width = cssWidth + "px";
-    canvas.style.height = cssHeight + "px";
-    canvas.width = Math.floor(cssWidth * dpr);
-    canvas.height = Math.floor(cssHeight * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cellSize = Math.floor(cssWidth / cols);
-    rows = Math.floor(cssHeight / cellSize);
+    try {
+      const cssWidth = 600;
+      const cssHeight = 530;
+      canvas.style.width = cssWidth + 'px';
+      canvas.style.height = cssHeight + 'px';
+      canvas.width = Math.floor(cssWidth * dpr);
+      canvas.height = Math.floor(cssHeight * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cellSize = Math.floor(cssWidth / cols);
+      rows = Math.floor(cssHeight / cellSize);
+    } catch (e) {
+      console.error('Canvas setup error:', e);
+    }
   }
+  setupCanvas();
 
+  // --- Audio Functions
   function beep(freq = 440, dur = 0.05, vol = 0.04) {
     try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
-      o.type = "sine";
+      o.type = 'sine';
       o.frequency.value = freq;
       g.gain.value = vol;
-      o.connect(g); g.connect(audioCtx.destination);
+      o.connect(g);
+      g.connect(audioCtx.destination);
       o.start();
       o.stop(audioCtx.currentTime + dur);
-    } catch (e) { }
+    } catch (e) {
+      console.warn('Audio error:', e);
+    }
   }
 
+  // --- Apple Placement
   function placeApple() {
-    const taken = new Set(snake.map(p => p.x + "," + p.y));
-    for (let attempts = 0; attempts < 3000; attempts++) {
-      const a = { x: Math.floor(Math.random() * cols), y: Math.floor(Math.random() * rows) };
-      if (!taken.has(a.x + "," + a.y)) {
-        a.type = Math.random() < 0.10 ? "gold" : "normal";
-        apple = a;
+    try {
+      const taken = new Set(snake.map(p => `${p.x},${p.y}`));
+      const freeCells = [];
+      
+      // Find all free cells
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          if (!taken.has(`${x},${y}`)) {
+            freeCells.push({ x, y });
+          }
+        }
+      }
+      
+      if (freeCells.length === 0) {
+        apple = null;
         return;
       }
+      
+      // Pick random free cell
+      const randomCell = freeCells[Math.floor(Math.random() * freeCells.length)];
+      apple = {
+        x: randomCell.x,
+        y: randomCell.y,
+        type: Math.random() < 0.10 ? 'gold' : 'normal'
+      };
+    } catch (e) {
+      console.error('Apple placement error:', e);
+      apple = null;
     }
-    // fallback: scan for first free
-    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (!taken.has(x + "," + y)) { apple = { x, y, type: "normal" }; return; }
-    apple = null;
   }
 
+  // --- Particle System
   function spawnParticles(x, y, color, count = 18) {
-    const allowed = Math.max(0, PARTICLE_CAP - particles.length);
-    const toSpawn = Math.min(count, allowed);
-    for (let i = 0; i < toSpawn; i++) {
-      const ang = Math.random() * Math.PI * 2, speed = Math.random() * 1.6 + 0.6;
-      particles.push({
-        x, y,
-        vx: Math.cos(ang) * speed,
-        vy: Math.sin(ang) * speed - 0.5,
-        life: 600 + Math.random() * 400,
-        born: performance.now(),
-        size: 2 + Math.random() * 3,
-        color
-      });
+    try {
+      const allowed = Math.max(0, PARTICLE_CAP - particles.length);
+      const toSpawn = Math.min(count, allowed);
+      
+      for (let i = 0; i < toSpawn; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 1.6 + 0.6;
+        particles.push({
+          x, y,
+          vx: Math.cos(ang) * speed,
+          vy: Math.sin(ang) * speed - 0.5,
+          life: 600 + Math.random() * 400,
+          born: performance.now(),
+          size: 2 + Math.random() * 3,
+          color
+        });
+      }
+    } catch (e) {
+      console.warn('Particle spawn error:', e);
     }
   }
 
   function updateParticles(dt) {
-    const now = performance.now();
-    particles = particles.filter(p => (now - p.born) < p.life);
-    for (let p of particles) {
-      p.vy += 0.06 * (dt / 16);
-      p.x += p.vx * (dt / 16);
-      p.y += p.vy * (dt / 16);
+    try {
+      const now = performance.now();
+      particles = particles.filter(p => (now - p.born) < p.life);
+      
+      for (let p of particles) {
+        p.vy += 0.06 * (dt / 16);
+        p.x += p.vx * (dt / 16);
+        p.y += p.vy * (dt / 16);
+      }
+    } catch (e) {
+      console.warn('Particle update error:', e);
     }
   }
 
+  // --- Trail Effect
   function pushTrail(px, py) {
-    trail.push({ x: px, y: py, t: performance.now() });
-    if (trail.length > TRAIL_MAX) trail.shift();
+    try {
+      trail.push({ x: px, y: py, t: performance.now() });
+      if (trail.length > TRAIL_MAX) trail.shift();
+    } catch (e) {
+      // Ignore trail errors
+    }
   }
 
+  // --- Game Control Functions
+  function startGame() {
+    try {
+      cols = cols || 20;
+      const cx = Math.floor(cols / 2);
+      const cy = Math.floor(rows / 2);
+      snake = [{ x: cx - 1, y: cy }, { x: cx, y: cy }];
+      dir = { x: 1, y: 0 };
+      nextDir = null;
+      score = 0;
+      updateScore();
+      placeApple();
+      trail = [];
+      particles = [];
+      shake.x = 0;
+      shake.y = 0;
+      running = true;
+      gamePaused = false;
+      accumulated = 0;
+      lastTick = performance.now();
+      overlay.style.display = 'none';
+      gameOverEl.style.display = 'none';
+      menuCard.classList.remove('exit');
+      pauseBtn.textContent = 'Pause';
+      
+      // Resume audio context if needed
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+    } catch (e) {
+      console.error('Game start error:', e);
+    }
+  }
+
+  function updateScore() {
+    try {
+      scoreEl.textContent = score;
+    } catch (e) {
+      console.warn('Score update error:', e);
+    }
+  }
+
+  function showEatPopup(text) {
+    if (!eatPopup) return;
+    
+    try {
+      eatPopup.textContent = text;
+      eatPopup.style.opacity = '1';
+      eatPopup.style.transform = 'translateX(-50%) translateY(-6px) scale(1.02)';
+      eatPopup.style.transition = 'none';
+      
+      requestAnimationFrame(() => {
+        eatPopup.style.transition = 'transform .6s cubic-bezier(.2,.8,.2,1), opacity .6s';
+        eatPopup.style.transform = 'translateX(-50%) translateY(-36px) scale(0.98)';
+        eatPopup.style.opacity = '0';
+      });
+    } catch (e) {
+      console.warn('Popup error:', e);
+    }
+  }
+
+  function die() {
+    try {
+      running = false;
+      shake.x += (Math.random() * 8 - 4);
+      shake.y += (Math.random() * 8 - 4);
+      beep(120, 0.16, 0.08);
+      finalScoreEl.textContent = score;
+      gameOverEl.style.display = 'flex';
+      overlay.style.display = 'none';
+      updateScore();
+    } catch (e) {
+      console.error('Game over error:', e);
+    }
+  }
+
+  // --- Game Logic
+  function gameTick() {
+    try {
+      // Update direction
+      if (nextDir) {
+        if (!(nextDir.x === -dir.x && nextDir.y === -dir.y)) {
+          dir = nextDir;
+        }
+        nextDir = null;
+      }
+
+      const head = snake[snake.length - 1];
+      let nx = head.x + dir.x;
+      let ny = head.y + dir.y;
+
+      // Handle wrapping or collision
+      if (wrap) {
+        if (nx < 0) nx = cols - 1;
+        if (nx >= cols) nx = 0;
+        if (ny < 0) ny = rows - 1;
+        if (ny >= rows) ny = 0;
+      } else {
+        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) {
+          return die();
+        }
+      }
+
+      // Check self-collision
+      for (let i = 0; i < snake.length; i++) {
+        if (snake[i].x === nx && snake[i].y === ny) {
+          return die();
+        }
+      }
+
+      // Move snake
+      snake.push({ x: nx, y: ny });
+
+      // Check apple consumption
+      if (apple && nx === apple.x && ny === apple.y) {
+        const gained = apple.type === 'gold' ? 3 : 1;
+        score += gained;
+        updateScore();
+
+        try {
+          if (apple.type === 'gold') {
+            beep(1100, 0.08, 0.08);
+            if (navigator.vibrate) {
+              navigator.vibrate([30, 20, 30]);
+            }
+            const pos = gridToPixel(apple.x, apple.y);
+            spawnParticles(pos.x, pos.y, 'gold', 32);
+            shake.x += (Math.random() * 6 - 3);
+            shake.y += (Math.random() * 6 - 3);
+            showEatPopup(`+${gained} ✨`);
+          } else {
+            beep(760, 0.04, 0.06);
+            if (navigator.vibrate) {
+              navigator.vibrate(30);
+            }
+            const pos = gridToPixel(apple.x, apple.y);
+            spawnParticles(pos.x, pos.y, 'red', 18);
+            shake.x += (Math.random() * 2 - 1);
+            shake.y += (Math.random() * 2 - 1);
+            showEatPopup(`+${gained}`);
+          }
+        } catch (e) {
+          console.warn('Effect error:', e);
+        }
+
+        placeApple();
+      } else {
+        snake.shift();
+      }
+
+      // Adjust game speed based on score
+      const extra = Math.floor(score / 6) * 0.6;
+      movesPerSecond = Math.min(40, Math.max(3, speedMap[speedLevel] + extra));
+      moveInterval = 1000 / movesPerSecond;
+    } catch (e) {
+      console.error('Game tick error:', e);
+    }
+  }
+
+  // --- Utility Functions
   function gridToPixel(gx, gy) {
-    const boardW = cols * cellSize, boardH = rows * cellSize;
-    const offsetX = Math.floor((parseInt(canvas.style.width) - boardW) / 2);
-    const offsetY = Math.floor((parseInt(canvas.style.height) - boardH) / 2);
-    return { x: offsetX + gx * cellSize + cellSize / 2, y: offsetY + gy * cellSize + cellSize / 2 };
+    try {
+      const boardW = cols * cellSize;
+      const boardH = rows * cellSize;
+      const offsetX = Math.floor((parseInt(canvas.style.width) - boardW) / 2);
+      const offsetY = Math.floor((parseInt(canvas.style.height) - boardH) / 2);
+      const cx = offsetX + gx * cellSize + cellSize / 2;
+      const cy = offsetY + gy * cellSize + cellSize / 2;
+      return { x: cx, y: cy };
+    } catch (e) {
+      return { x: gx * cellSize + cellSize / 2, y: gy * cellSize + cellSize / 2 };
+    }
   }
 
   function roundRect(ctx, x, y, w, h, r, fill) {
@@ -292,404 +525,456 @@
     if (fill) ctx.fill(); else ctx.stroke();
   }
 
-  // --- Game Logic ---
-  function startGame() {
-    cols = cols || 20;
-    const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
-    snake = [{ x: cx - 1, y: cy }, { x: cx, y: cy }];
-    dir = { x: 1, y: 0 };
-    nextDir = null;
-    score = 0;
-    updateScore();
-    placeApple();
-    trail = [];
-    particles = [];
-    shake.x = 0; shake.y = 0;
-    running = true;
-    accumulated = 0;
-    lastTick = performance.now();
-    overlay.style.display = "none";
-    gameOverEl.style.display = "none";
-    menuCard.classList.remove("exit");
-    pauseBtn.textContent = "Pause";
-    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
-  }
-
-  function updateScore() {
-    scoreEl.textContent = score;
-  }
-
-  function showEatPopup(text) {
-    if (!eatPopup) return;
-    eatPopup.textContent = text;
-    eatPopup.style.opacity = "1";
-    eatPopup.style.transform = "translateX(-50%) translateY(-6px) scale(1.02)";
-    eatPopup.style.transition = "none";
-    requestAnimationFrame(() => {
-      eatPopup.style.transition = "transform .6s cubic-bezier(.2,.8,.2,1),opacity .6s";
-      eatPopup.style.transform = "translateX(-50%) translateY(-36px) scale(0.98)";
-      eatPopup.style.opacity = "0";
-    });
-  }
-
-  function die() {
-    running = false;
-    shake.x += (Math.random() * 8 - 4);
-    shake.y += (Math.random() * 8 - 4);
-    beep(120, 0.16, 0.08);
-    finalScoreEl.textContent = score;
-    gameOverEl.style.display = "flex";
-    overlay.style.display = "none";
-    updateScore();
-  }
-
-  function gameTick() {
-    if (nextDir && !(nextDir.x === -dir.x && nextDir.y === -dir.y)) dir = nextDir;
-    nextDir = null;
-    const head = snake[snake.length - 1];
-    let nx = head.x + dir.x, ny = head.y + dir.y;
-    if (wrap) {
-      if (nx < 0) nx = cols - 1;
-      if (nx >= cols) nx = 0;
-      if (ny < 0) ny = rows - 1;
-      if (ny >= rows) ny = 0;
-    } else {
-      if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) return die();
-    }
-    for (let i = 0; i < snake.length; i++) if (snake[i].x === nx && snake[i].y === ny) return die();
-    snake.push({ x: nx, y: ny });
-    if (apple && nx === apple.x && ny === apple.y) {
-      const gained = apple.type === "gold" ? 3 : 1;
-      score += gained;
-      updateScore();
-      try {
-        if (apple.type === "gold") {
-          beep(1100, 0.08, 0.08);
-          if (navigator && navigator.vibrate) navigator.vibrate([30, 20, 30]);
-          const pos = gridToPixel(apple.x, apple.y);
-          spawnParticles(pos.x, pos.y, "gold", 32);
-          shake.x += (Math.random() * 6 - 3);
-          shake.y += (Math.random() * 6 - 3);
-          showEatPopup("+" + gained + " ✨");
-        } else {
-          beep(760, 0.04, 0.06);
-          if (navigator && navigator.vibrate) navigator.vibrate(30);
-          const pos = gridToPixel(apple.x, apple.y);
-          spawnParticles(pos.x, pos.y, "red", 18);
-          shake.x += (Math.random() * 2 - 1);
-          shake.y += (Math.random() * 2 - 1);
-          showEatPopup("+" + gained);
-        }
-      } catch (e) { }
-      placeApple();
-    } else {
-      snake.shift();
-    }
-    // Dynamic speed increase
-    const extra = Math.floor(score / 6) * 0.6;
-    movesPerSecond = speedMap[speedLevel] + extra;
-    movesPerSecond = Math.min(40, Math.max(3, movesPerSecond));
-    moveInterval = 1000 / movesPerSecond;
-  }
-
-  // --- Drawing ---
+  // --- Rendering
   function draw(now, interpolation) {
-    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-    const boardW = cols * cellSize, boardH = rows * cellSize;
-    const offsetX = Math.floor((parseInt(canvas.style.width) - boardW) / 2);
-    const offsetY = Math.floor((parseInt(canvas.style.height) - boardH) / 2);
-    const sx = shake.x * 0.6, sy = shake.y * 0.6;
-    // Draw board
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      const x = offsetX + c * cellSize + sx, y = offsetY + r * cellSize + sy;
-      let fill = (c + r) % 2 === 0 ? "#4b7730" : "#437022";
-      if (document.documentElement.classList.contains("dark")) fill = (c + r) % 2 === 0 ? "#0f3216" : "#09240f";
-      ctx.fillStyle = fill;
-      ctx.fillRect(x, y, cellSize, cellSize);
-    }
-    // Ghost trail
-    ctx.save();
-    for (let i = 0; i < trail.length; i++) {
-      const t = trail[i];
-      const alpha = Math.max(0, 0.55 - (i / trail.length) * 0.5);
-      ctx.globalAlpha = alpha * 0.8;
-      ctx.fillStyle = document.documentElement.classList.contains("dark") ? "#9be2a0" : "#cfeec7";
-      const px = offsetX + t.x * cellSize + sx, py = offsetY + t.y * cellSize + sy;
-      const radius = cellSize * (0.34 - i * 0.012);
-      ctx.beginPath();
-      ctx.ellipse(px + cellSize / 2, py + cellSize / 2, radius, radius, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-    // Apple
-    if (apple) {
-      const apx = offsetX + apple.x * cellSize + cellSize / 2 + sx, apy = offsetY + apple.y * cellSize + cellSize / 2 + sy;
+    try {
+      ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+      
+      const boardW = cols * cellSize;
+      const boardH = rows * cellSize;
+      const offsetX = Math.floor((parseInt(canvas.style.width) - boardW) / 2);
+      const offsetY = Math.floor((parseInt(canvas.style.height) - boardH) / 2);
+      const sx = shake.x * 0.6;
+      const sy = shake.y * 0.6;
+
+      // Draw grid background
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = offsetX + c * cellSize + sx;
+          const y = offsetY + r * cellSize + sy;
+          let fill = ((c + r) % 2 === 0) ? '#4b7730' : '#437022';
+          if (document.documentElement.classList.contains('dark')) {
+            fill = ((c + r) % 2 === 0) ? '#0f3216' : '#09240f';
+          }
+          ctx.fillStyle = fill;
+          ctx.fillRect(x, y, cellSize, cellSize);
+        }
+      }
+
+      // Draw ghost trail
       ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,0.18)";
-      ctx.beginPath(); ctx.ellipse(apx, apy + cellSize * 0.28, cellSize * 0.38, cellSize * 0.14, 0, 0, Math.PI * 2); ctx.fill();
-      if (apple.type === "gold") {
-        const g = ctx.createLinearGradient(apx - 12, apy - 12, apx + 12, apy + 12);
-        g.addColorStop(0, "#ffe28a"); g.addColorStop(1, "#ffb74d");
-        ctx.fillStyle = g;
-        roundRect(ctx, apx - cellSize * 0.36, apy - cellSize * 0.36, cellSize * 0.72, cellSize * 0.72, cellSize * 0.18, true);
-        ctx.fillStyle = "rgba(255,255,255,0.65)";
-        ctx.fillRect(apx - 6, apy - cellSize * 0.12, 3, 3);
-      } else {
-        const grad = ctx.createLinearGradient(apx - 12, apy - 12, apx + 12, apy + 12);
-        grad.addColorStop(0, "#ff8a8a"); grad.addColorStop(1, "#ff3b3b");
-        ctx.fillStyle = grad;
-        roundRect(ctx, apx - cellSize * 0.32, apy - cellSize * 0.32, cellSize * 0.64, cellSize * 0.64, cellSize * 0.16, true);
+      for (let i = 0; i < trail.length; i++) {
+        const t = trail[i];
+        const alpha = Math.max(0, 0.55 - (i / trail.length) * 0.5);
+        ctx.globalAlpha = alpha * 0.8;
+        ctx.fillStyle = document.documentElement.classList.contains('dark') ? '#9be2a0' : '#cfeec7';
+        const px = offsetX + t.x * cellSize + sx;
+        const py = offsetY + t.y * cellSize + sy;
+        const radius = cellSize * (0.34 - i * 0.012);
+        ctx.beginPath();
+        ctx.ellipse(px + cellSize / 2, py + cellSize / 2, radius, radius, 0, 0, Math.PI * 2);
+        ctx.fill();
       }
-      ctx.restore();
-    }
-    // Snake
-    if (snake.length >= 2) {
-      const head = snake[snake.length - 1], prevHead = snake[snake.length - 2];
-      const hx = prevHead.x + (head.x - prevHead.x) * interpolation;
-      const hy = prevHead.y + (head.y - prevHead.y) * interpolation;
-      for (let i = 0; i < snake.length; i++) {
-        const p = snake[i];
-        let drawX = p.x, drawY = p.y;
-        if (i === snake.length - 1) { drawX = hx; drawY = hy; }
-        else if (i === snake.length - 2) {
-          drawX = p.x + ((snake[snake.length - 1].x - p.x) * interpolation * 0.6);
-          drawY = p.y + ((snake[snake.length - 1].y - p.y) * interpolation * 0.6);
-        }
-        const px = offsetX + drawX * cellSize + sx, py = offsetY + drawY * cellSize + sy;
-        const t = i / Math.max(1, snake.length - 1);
-        const segSize = cellSize * (i === snake.length - 1 ? 0.96 : 0.88);
-        let rcol = 28, gcol = Math.floor(120 + (80 * (1 - t))), bcol = 36;
-        if (document.documentElement.classList.contains("dark")) {
-          rcol = 180; gcol = Math.floor(240 - 40 * t); bcol = 210;
-        }
-        ctx.fillStyle = `rgb(${rcol},${gcol},${bcol})`;
-        roundRect(ctx, px + (cellSize - segSize) / 2, py + (cellSize - segSize) / 2, segSize, segSize, segSize * 0.18, true);
-        if (i === snake.length - 1) {
-          ctx.fillStyle = document.documentElement.classList.contains("dark") ? "rgba(0,0,0,0.95)" : "rgba(255,255,255,0.96)";
-          const eyeW = Math.max(1, cellSize * 0.058);
-          const ex = px + segSize * 0.34, ey = py + segSize * 0.32;
-          ctx.fillRect(ex, ey, eyeW, eyeW);
-          ctx.fillRect(ex + segSize * 0.18, ey, eyeW, eyeW);
-        }
-      }
-    } else {
-      for (let i = 0; i < snake.length; i++) {
-        const p = snake[i];
-        const px = offsetX + p.x * cellSize + sx, py = offsetY + p.y * cellSize + sy;
-        const segSize = cellSize * 0.9;
-        ctx.fillStyle = "#2f6b24";
-        roundRect(ctx, px + (cellSize - segSize) / 2, py + (cellSize - segSize) / 2, segSize, segSize, segSize * 0.18, true);
-      }
-    }
-    // Particles
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
-      const age = (performance.now() - p.born) / p.life;
-      const alpha = Math.max(0, 1 - age);
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = p.color === "gold" ? "#ffd875" : "#ff8a8a";
-      ctx.beginPath();
-      ctx.ellipse(p.x + sx, p.y + sy, p.size * (1 - age), p.size * (1 - age), 0, 0, Math.PI * 2);
-      ctx.fill();
       ctx.globalAlpha = 1;
+      ctx.restore();
+
+      // Draw apple
+      if (apple) {
+        const apx = offsetX + apple.x * cellSize + cellSize / 2 + sx;
+        const apy = offsetY + apple.y * cellSize + cellSize / 2 + sy;
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.beginPath();
+        ctx.ellipse(apx, apy + cellSize * 0.28, cellSize * 0.38, cellSize * 0.14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        if (apple.type === 'gold') {
+          const g = ctx.createLinearGradient(apx - 12, apy - 12, apx + 12, apy + 12);
+          g.addColorStop(0, '#ffe28a');
+          g.addColorStop(1, '#ffb74d');
+          ctx.fillStyle = g;
+          roundRect(ctx, apx - cellSize * 0.36, apy - cellSize * 0.36, cellSize * 0.72, cellSize * 0.72, cellSize * 0.18, true);
+          ctx.fillStyle = 'rgba(255,255,255,0.65)';
+          ctx.fillRect(apx - 6, apy - cellSize * 0.12, 3, 3);
+        } else {
+          const grad = ctx.createLinearGradient(apx - 12, apy - 12, apx + 12, apy + 12);
+          grad.addColorStop(0, '#ff8a8a');
+          grad.addColorStop(1, '#ff3b3b');
+          ctx.fillStyle = grad;
+          roundRect(ctx, apx - cellSize * 0.32, apy - cellSize * 0.32, cellSize * 0.64, cellSize * 0.64, cellSize * 0.16, true);
+        }
+        ctx.restore();
+      }
+
+      // Draw snake with interpolation
+      if (snake.length >= 2) {
+        const head = snake[snake.length - 1];
+        const prevHead = snake[snake.length - 2];
+        const hx = prevHead.x + (head.x - prevHead.x) * interpolation;
+        const hy = prevHead.y + (head.y - prevHead.y) * interpolation;
+
+        for (let i = 0; i < snake.length; i++) {
+          const p = snake[i];
+          let drawX = p.x, drawY = p.y;
+          
+          if (i === snake.length - 1) {
+            drawX = hx;
+            drawY = hy;
+          } else if (i === snake.length - 2) {
+            drawX = p.x + ((snake[snake.length - 1].x - p.x) * interpolation * 0.6);
+            drawY = p.y + ((snake[snake.length - 1].y - p.y) * interpolation * 0.6);
+          }
+          
+          const px = offsetX + drawX * cellSize + sx;
+          const py = offsetY + drawY * cellSize + sy;
+          const t = i / Math.max(1, snake.length - 1);
+          const segSize = cellSize * (i === snake.length - 1 ? 0.96 : 0.88);
+          
+          let rcol = 28, gcol = Math.floor(120 + (80 * (1 - t))), bcol = 36;
+          if (document.documentElement.classList.contains('dark')) {
+            rcol = 180;
+            gcol = Math.floor(240 - 40 * t);
+            bcol = 210;
+          }
+          
+          ctx.fillStyle = `rgb(${rcol},${gcol},${bcol})`;
+          roundRect(ctx, px + (cellSize - segSize) / 2, py + (cellSize - segSize) / 2, segSize, segSize, segSize * 0.18, true);
+          
+          if (i === snake.length - 1) {
+            ctx.fillStyle = document.documentElement.classList.contains('dark') ? 'rgba(0,0,0,0.95)' : 'rgba(255,255,255,0.96)';
+            const eyeW = Math.max(1, cellSize * 0.058);
+            const ex = px + segSize * 0.34;
+            const ey = py + segSize * 0.32;
+            ctx.fillRect(ex, ey, eyeW, eyeW);
+            ctx.fillRect(ex + segSize * 0.18, ey, eyeW, eyeW);
+          }
+        }
+      } else {
+        for (let i = 0; i < snake.length; i++) {
+          const p = snake[i];
+          const px = offsetX + p.x * cellSize + sx;
+          const py = offsetY + p.y * cellSize + sy;
+          const segSize = cellSize * 0.9;
+          ctx.fillStyle = '#2f6b24';
+          roundRect(ctx, px + (cellSize - segSize) / 2, py + (cellSize - segSize) / 2, segSize, segSize, segSize * 0.18, true);
+        }
+      }
+
+      // Draw particles
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const age = (performance.now() - p.born) / p.life;
+        const alpha = Math.max(0, 1 - age);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color === 'gold' ? '#ffd875' : '#ff8a8a';
+        ctx.beginPath();
+        ctx.ellipse(p.x + sx, p.y + sy, p.size * (1 - age), p.size * (1 - age), 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Draw border
+      ctx.strokeStyle = 'rgba(0,0,0,0.14)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(offsetX + sx, offsetY + sy, boardW, boardH);
+    } catch (e) {
+      console.error('Drawing error:', e);
     }
-    // Border
-    ctx.strokeStyle = "rgba(0,0,0,0.14)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(offsetX + sx, offsetY + sy, boardW, boardH);
   }
 
-  // --- Main Loop ---
-  let raf = null;
+  // --- Main Game Loop
+  let rafId = null;
   function mainLoop(now) {
     try {
       if (!lastTick) lastTick = now;
       const dt = now - lastTick;
       lastTick = now;
-      accumulated += dt;
-      const interval = moveInterval;
-      while (running && accumulated >= interval) {
-        gameTick();
-        accumulated -= interval;
+      
+      // Cap delta time to prevent spiral of death
+      const cappedDt = Math.min(dt, 100);
+      accumulated += cappedDt;
+
+      if (running && !gamePaused) {
+        const interval = moveInterval;
+        while (accumulated >= interval) {
+          gameTick();
+          accumulated -= interval;
+        }
       }
-      const frac = Math.min(1, accumulated / interval);
-      updateParticles(dt);
-      const head = snake[snake.length - 1];
-      if (head) pushTrail(head.x, head.y);
-      shake.x *= 0.86; shake.y *= 0.86;
+
+      const frac = Math.min(1, accumulated / moveInterval);
+
+      if (!gamePaused) {
+        updateParticles(dt);
+        const head = snake[snake.length - 1];
+        if (head) pushTrail(head.x, head.y);
+        shake.x *= 0.86;
+        shake.y *= 0.86;
+      }
+
       draw(now, frac);
-    } catch (err) { }
-    raf = requestAnimationFrame(mainLoop);
+    } catch (err) {
+      console.error('Main loop error:', err);
+    } finally {
+      rafId = requestAnimationFrame(mainLoop);
+    }
   }
-  setupCanvas();
-  raf = requestAnimationFrame(mainLoop);
 
-  // --- Input Handling ---
+  // Start the game loop
+  rafId = requestAnimationFrame(mainLoop);
+
+  // --- Input Handling
   function setDirection(dx, dy) {
-    const nd = { x: dx, y: dy };
-    const head = snake[snake.length - 1];
-    const neck = snake.length > 1 ? snake[snake.length - 2] : null;
-    if (neck && neck.x === head.x + nd.x && neck.y === head.y + nd.y) return;
-    nextDir = nd;
+    try {
+      const nd = { x: dx, y: dy };
+      const head = snake[snake.length - 1];
+      const neck = snake.length > 1 ? snake[snake.length - 2] : null;
+      
+      if (neck && neck.x === head.x + nd.x && neck.y === head.y + nd.y) return;
+      nextDir = nd;
+    } catch (e) {
+      console.warn('Direction setting error:', e);
+    }
   }
 
-  window.addEventListener("keydown", e => {
-    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "W", "A", "S", "D"].indexOf(e.key) === -1) return;
+  // Keyboard input
+  window.addEventListener('keydown', (e) => {
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(e.key)) return;
     e.preventDefault();
-    if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") setDirection(0, -1);
-    if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") setDirection(0, 1);
-    if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") setDirection(-1, 0);
-    if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") setDirection(1, 0);
+    
+    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') setDirection(0, -1);
+    if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') setDirection(0, 1);
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') setDirection(-1, 0);
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') setDirection(1, 0);
   });
 
-  // Touch controls
-  let touchStart = null, touchLast = null;
+  // Touch input for mobile
+  let touchStart = null;
+  let touchLast = null;
   const SWIPE_THRESHOLD = 12;
-  canvas.addEventListener("touchstart", ev => {
-    if (ev.touches && ev.touches.length === 1) {
-      const t = ev.touches[0];
-      touchStart = { x: t.clientX, y: t.clientY, time: Date.now() };
-      touchLast = { x: t.clientX, y: t.clientY };
+  
+  canvas.addEventListener('touchstart', (ev) => {
+    try {
+      if (ev.touches && ev.touches.length === 1) {
+        const t = ev.touches[0];
+        touchStart = { x: t.clientX, y: t.clientY, time: Date.now() };
+        touchLast = { x: t.clientX, y: t.clientY };
+      }
+      ev.preventDefault();
+    } catch (e) {
+      console.warn('Touch start error:', e);
     }
-    ev.preventDefault();
-  }, { passive: false });
-  canvas.addEventListener("touchmove", ev => {
-    if (ev.touches && ev.touches.length === 1 && touchStart) {
-      const t = ev.touches[0];
-      touchLast = { x: t.clientX, y: t.clientY };
-    }
-    ev.preventDefault();
-  }, { passive: false });
-  canvas.addEventListener("touchend", ev => {
-    if (!touchStart) return;
-    const end = touchLast || touchStart;
-    const dx = end.x - touchStart.x, dy = end.y - touchStart.y;
-    const adx = Math.abs(dx), ady = Math.abs(dy);
-    if (Math.max(adx, ady) >= SWIPE_THRESHOLD) {
-      if (adx > ady) setDirection(dx > 0 ? 1 : -1, 0);
-      else setDirection(0, dy > 0 ? 1 : -1);
-    }
-    touchStart = null; touchLast = null;
-    ev.preventDefault();
   }, { passive: false });
 
-  // --- UI Events ---
-  playBtn.addEventListener("click", startGame);
-  retryBtn.addEventListener("click", startGame);
-  menuBtn.addEventListener("click", () => {
-    overlay.style.display = "flex";
-    settingsPanel.style.display = "none";
-    gameOverEl.style.display = "none";
+  canvas.addEventListener('touchmove', (ev) => {
+    try {
+      if (ev.touches && ev.touches.length === 1 && touchStart) {
+        const t = ev.touches[0];
+        touchLast = { x: t.clientX, y: t.clientY };
+      }
+      ev.preventDefault();
+    } catch (e) {
+      console.warn('Touch move error:', e);
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', (ev) => {
+    try {
+      if (!touchStart) return;
+      const end = touchLast || touchStart;
+      const dx = end.x - touchStart.x;
+      const dy = end.y - touchStart.y;
+      const adx = Math.abs(dx), ady = Math.abs(dy);
+
+      if (Math.max(adx, ady) >= SWIPE_THRESHOLD) {
+        if (adx > ady) {
+          if (dx > 0) setDirection(1, 0); else setDirection(-1, 0);
+        } else {
+          if (dy > 0) setDirection(0, 1); else setDirection(0, -1);
+        }
+      }
+      touchStart = null;
+      touchLast = null;
+      ev.preventDefault();
+    } catch (e) {
+      console.warn('Touch end error:', e);
+    }
+  }, { passive: false });
+
+  // --- UI Event Handlers
+  playBtn.addEventListener('click', startGame);
+  retryBtn.addEventListener('click', startGame);
+  
+  menuBtn.addEventListener('click', () => {
+    overlay.style.display = 'flex';
+    settingsPanel.style.display = 'none';
+    gameOverEl.style.display = 'none';
     running = false;
-    menuCard.classList.remove("exit");
+    gamePaused = false;
+    menuCard.classList.remove('exit');
+    pauseBtn.textContent = 'Pause';
   });
-  pauseBtn.addEventListener("click", () => {
-    running = !running;
-    pauseBtn.textContent = running ? "Pause" : "Resume";
+
+  pauseBtn.addEventListener('click', () => {
+    gamePaused = !gamePaused;
+    pauseBtn.textContent = gamePaused ? 'Resume' : 'Pause';
   });
-  settingsBtn.addEventListener("click", () => {
-    settingsPanel.style.display = settingsPanel.style.display === "block" ? "none" : "block";
+
+  settingsBtn.addEventListener('click', () => {
+    settingsPanel.style.display = settingsPanel.style.display === 'block' ? 'none' : 'block';
   });
-  wrapBtn.addEventListener("click", () => {
+
+  wrapBtn.addEventListener('click', () => {
     wrap = !wrap;
     wrapBtn.dataset.wrap = String(wrap);
-    wrapBtn.textContent = `Wrap: ${wrap ? "ON" : "OFF"}`;
+    wrapBtn.textContent = `Wrap: ${wrap ? 'ON' : 'OFF'}`;
   });
-  shuffleBtn.addEventListener("click", () => {
-    const sizes = [24, 20, 16], speeds = [0, 1, 2], themes = ["dark", "light"];
+
+  shuffleBtn.addEventListener('click', () => {
+    const sizes = [24, 20, 16];
+    const speeds = [0, 1, 2];
+    const themes = ['dark', 'light'];
     const s = sizes[Math.floor(Math.random() * sizes.length)];
     const sp = speeds[Math.floor(Math.random() * speeds.length)];
     const th = themes[Math.floor(Math.random() * themes.length)];
-    applySize(s); applySpeed(sp); applyTheme(th);
+    applySize(s);
+    applySpeed(sp);
+    applyTheme(th);
   });
-  speedPicker.addEventListener("click", e => {
-    const chip = e.target.closest(".chip");
+
+  // Settings pickers
+  speedPicker.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
     if (!chip) return;
     const idx = Number(chip.dataset.speed);
     applySpeed(idx);
   });
-  sizePicker.addEventListener("click", e => {
-    const chip = e.target.closest(".chip");
+
+  sizePicker.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
     if (!chip) return;
     const size = Number(chip.dataset.size);
     applySize(size);
   });
-  themePicker.addEventListener("click", e => {
-    const chip = e.target.closest(".chip");
+
+  themePicker.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
     if (!chip) return;
     applyTheme(chip.dataset.theme);
   });
 
   function applySpeed(idx) {
-    [...speedPicker.querySelectorAll(".chip")].forEach(c => c.classList.remove("active"));
-    const active = speedPicker.querySelector(`.chip[data-speed="${idx}"]`);
-    if (active) active.classList.add("active");
-    speedLevel = idx;
-    movesPerSecond = speedMap[speedLevel];
-    moveInterval = 1000 / movesPerSecond;
-  }
-  function applySize(sizeCols) {
-    [...sizePicker.querySelectorAll(".chip")].forEach(c => c.classList.remove("active"));
-    const active = sizePicker.querySelector(`.chip[data-size="${sizeCols}"]`);
-    if (active) active.classList.add("active");
-    cols = sizeCols;
-    setupCanvas();
-    if (running) startGame();
-  }
-  function applyTheme(th) {
-    [...themePicker.querySelectorAll(".chip")].forEach(c => c.classList.remove("active"));
-    const active = themePicker.querySelector(`.chip[data-theme="${th}"]`);
-    if (active) active.classList.add("active");
-    if (th === "dark") {
-      document.documentElement.classList.add("dark");
-      themeToggle.setAttribute("aria-pressed", "true");
-    } else {
-      document.documentElement.classList.remove("dark");
-      themeToggle.setAttribute("aria-pressed", "false");
+    try {
+      [...speedPicker.querySelectorAll('.chip')].forEach(c => c.classList.remove('active'));
+      const active = speedPicker.querySelector(`.chip[data-speed="${idx}"]`);
+      if (active) active.classList.add('active');
+      speedLevel = idx;
+      movesPerSecond = speedMap[speedLevel];
+      moveInterval = 1000 / movesPerSecond;
+    } catch (e) {
+      console.error('Speed apply error:', e);
     }
   }
 
-  // --- Initialization ---
+  function applySize(sizeCols) {
+    try {
+      [...sizePicker.querySelectorAll('.chip')].forEach(c => c.classList.remove('active'));
+      const active = sizePicker.querySelector(`.chip[data-size="${sizeCols}"]`);
+      if (active) active.classList.add('active');
+      cols = sizeCols;
+      setupCanvas();
+      if (running) startGame();
+    } catch (e) {
+      console.error('Size apply error:', e);
+    }
+  }
+
+  function applyTheme(th) {
+    try {
+      [...themePicker.querySelectorAll('.chip')].forEach(c => c.classList.remove('active'));
+      const active = themePicker.querySelector(`.chip[data-theme="${th}"]`);
+      if (active) active.classList.add('active');
+      if (th === 'dark') {
+        document.documentElement.classList.add('dark');
+        themeToggle.setAttribute('aria-pressed', 'true');
+      } else {
+        document.documentElement.classList.remove('dark');
+        themeToggle.setAttribute('aria-pressed', 'false');
+      }
+    } catch (e) {
+      console.error('Theme apply error:', e);
+    }
+  }
+
+  // Initialize pickers
   (function initPickers() {
-    const activeSpeed = speedPicker.querySelector(".chip.active");
-    if (activeSpeed) applySpeed(Number(activeSpeed.dataset.speed));
-    const activeSize = sizePicker.querySelector(".chip.active");
-    if (activeSize) applySize(Number(activeSize.dataset.size));
-    const activeTheme = themePicker.querySelector(".chip.active");
-    if (activeTheme) applyTheme(activeTheme.dataset.theme);
+    try {
+      const activeSpeed = speedPicker.querySelector('.chip.active');
+      if (activeSpeed) applySpeed(Number(activeSpeed.dataset.speed));
+      const activeSize = sizePicker.querySelector('.chip.active');
+      if (activeSize) applySize(Number(activeSize.dataset.size));
+      const activeTheme = themePicker.querySelector('.chip.active');
+      if (activeTheme) applyTheme(activeTheme.dataset.theme);
+    } catch (e) {
+      console.error('Picker init error:', e);
+    }
   })();
 
+  // Theme management
   function applySystemTheme() {
-    const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (prefersDark) {
-      document.documentElement.classList.add("dark");
-      themeToggle.setAttribute("aria-pressed", "true");
-    } else {
-      document.documentElement.classList.remove("dark");
-      themeToggle.setAttribute("aria-pressed", "false");
+    try {
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        document.documentElement.classList.add('dark');
+        themeToggle.setAttribute('aria-pressed', 'true');
+      } else {
+        document.documentElement.classList.remove('dark');
+        themeToggle.setAttribute('aria-pressed', 'false');
+      }
+    } catch (e) {
+      console.error('System theme error:', e);
     }
   }
+
   applySystemTheme();
-  window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applySystemTheme);
-  themeToggle.addEventListener("click", () => {
-    if (document.documentElement.classList.contains("dark")) {
-      document.documentElement.classList.remove("dark");
-      themeToggle.setAttribute("aria-pressed", "false");
-    } else {
-      document.documentElement.classList.add("dark");
-      themeToggle.setAttribute("aria-pressed", "true");
+  
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySystemTheme);
+  }
+
+  themeToggle.addEventListener('click', () => {
+    try {
+      if (document.documentElement.classList.contains('dark')) {
+        document.documentElement.classList.remove('dark');
+        themeToggle.setAttribute('aria-pressed', 'false');
+      } else {
+        document.documentElement.classList.add('dark');
+        themeToggle.setAttribute('aria-pressed', 'true');
+      }
+    } catch (e) {
+      console.error('Theme toggle error:', e);
     }
   });
 
-  window.addEventListener("resize", () => {
-    dpr = Math.max(1, window.devicePixelRatio || 1);
-    setupCanvas();
+  // Window resize handling
+  window.addEventListener('resize', () => {
+    try {
+      dpr = Math.max(1, window.devicePixelRatio || 1);
+      setupCanvas();
+    } catch (e) {
+      console.error('Resize error:', e);
+    }
   });
 
+  // Ensure apple exists on startup
   if (!apple) placeApple();
+
+  // Focus management for accessibility
   playBtn.focus();
+
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+    }
+    if (audioCtx) {
+      audioCtx.close().catch(() => {});
+    }
+  });
+
+  // Debug exports (optional)
   window._snake = { startGame, applySize, applySpeed, applyTheme };
+
 })();
 </script>
 </body>
