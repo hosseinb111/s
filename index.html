@@ -26,9 +26,10 @@
 
 html, body {
   height: 100%;
+  width: 100%;
   background: var(--bg);
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   font-family: 'DM Mono', monospace;
   overflow: hidden;
@@ -53,17 +54,20 @@ body::before {
 }
 
 .wrap {
-  width: min(900px, 98vw);
+  width: min(960px, 100vw);
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
+  position: relative;
 }
 
 /* ── TOPBAR ── */
 .topbar {
   width: 100%;
+  flex: 0 0 64px;
   height: 64px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -135,13 +139,16 @@ body::before {
 /* ── BOARD ── */
 .board-frame {
   width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
   overflow: hidden;
   position: relative;
-  /* glow pulse when running */
   transition: box-shadow 0.5s;
+  display: flex;
+  flex-direction: column;
 }
 .board-frame.alive {
   box-shadow: 0 0 0 1px rgba(57,255,133,0.12),
@@ -149,12 +156,14 @@ body::before {
 }
 
 .canvas-wrap {
+  flex: 1 1 0;
+  min-height: 0;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-  min-height: 560px;
+  padding: 16px;
+  overflow: hidden;
 }
 
 canvas {
@@ -235,6 +244,9 @@ canvas {
 
 /* settings panel */
 .settings-panel {
+  position: absolute;
+  top: 86px;
+  right: 12px;
   width: 300px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -245,6 +257,7 @@ canvas {
   opacity: 0;
   pointer-events: none;
   transition: transform 0.22s cubic-bezier(0.2,1,0.3,1), opacity 0.22s;
+  z-index: 100;
 }
 .settings-panel.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
 
@@ -352,11 +365,12 @@ canvas {
 /* ── BOTTOM BAR ── */
 .bottombar {
   width: 100%;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .ctrl-btns { display: flex; gap: 8px; }
@@ -380,7 +394,7 @@ canvas {
 
 /* responsive */
 @media (max-width: 600px) {
-  .canvas-wrap { min-height: 380px; padding: 12px; }
+  .canvas-wrap { padding: 10px; }
   .logo { font-size: 18px; }
   .score-val { font-size: 18px; }
   .bottombar { flex-direction: column; align-items: flex-start; }
@@ -547,12 +561,18 @@ bestEl.textContent = best;
 
 // ─── CANVAS SETUP ────────────────────────────────────────────────────────────
 function resizeCanvas() {
-  const w = canvasWrap.clientWidth  - 40;
-  const h = canvasWrap.clientHeight - 40;
-  const available = Math.min(w, h, 700);
-  cellSize = Math.floor(available / cols);
+  // Use actual rendered dimensions of the canvas-wrap container
+  const pad = 32; // 16px padding each side
+  const availW = Math.max(canvasWrap.clientWidth  - pad, 200);
+  const availH = Math.max(canvasWrap.clientHeight - pad, 200);
+
+  // Cell size: fit cols into width, then see how many rows fit in height
+  // Also cap cell size so the board isn't absurdly large on ultra-wide screens
+  cellSize = Math.floor(Math.min(availW / cols, availH / 14, 44));
   cellSize = Math.max(cellSize, 18);
-  rows = Math.floor(h / cellSize);
+
+  // Fill height with as many rows as possible (square cells)
+  rows = Math.floor(availH / cellSize);
   rows = Math.max(rows, 12);
 
   cvs.width  = cols * cellSize;
@@ -1042,13 +1062,16 @@ wirePicker('wallPicker', val => { wallMode = val; });
 wirePicker('trailPicker', val => { trailsOn = val === '1'; });
 
 window.addEventListener('resize', () => {
-  resizeCanvas();
+  requestAnimationFrame(resizeCanvas);
 });
 
 // ─── BOOTSTRAP ───────────────────────────────────────────────────────────────
-resizeCanvas();
-lastTs = performance.now();
-requestAnimationFrame(loop);
+// Use two rAFs to ensure full layout pass before measuring container sizes
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  resizeCanvas();
+  lastTs = performance.now();
+  requestAnimationFrame(loop);
+}));
 </script>
 </body>
 </html>
